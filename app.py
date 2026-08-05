@@ -46,11 +46,10 @@ max_results = st.sidebar.slider("Articles to fetch", min_value=4, max_value=15, 
 # ==================GET USER INFO=====================
 st.markdown("### NEWSLETTER DETAILS")
 newsletter_title = st.text_input("Newsletter Title", value="Weekly Digest")
-topic = st.text_input("Topic (optional - leave blank for general top news)", value="")
 
 
 # =========== TOOL 1 ======================
-def weekly_article_collector(topic=None, max_results=8):
+def weekly_article_collector(max_results=8):
     """This function searches the web for the top articles
     published in the current week using tavily search api.
     If a specific topic/niche is given it narrows the search
@@ -58,7 +57,7 @@ def weekly_article_collector(topic=None, max_results=8):
     news headlines across any topic for the week. Returns
     article metadata like title, url, content and published date"""
 
-    query = topic if topic else "top trending world news headlines this week"
+    query = "top trending world news headlines this week"
 
     client = TavilyClient(api_key=TAVILY_API_KEY)
     response = client.search(
