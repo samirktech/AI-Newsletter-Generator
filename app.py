@@ -39,14 +39,14 @@ elif all(all_API):
 else:
     st.info("PASS ALL API-KEYS")
 
-max_results = 8
+max_results = 5
 # ==================GET USER INFO=====================
 st.markdown("### NEWSLETTER DETAILS")
 newsletter_title = st.text_input("Newsletter Title", value="Weekly Digest")
 
 
 # =========== TOOL 1 ======================
-def weekly_article_collector(max_results=8):
+def weekly_article_collector(max_results=5):
     """This function searches the web for the top trending news
     headlines published in the current week using the Tavily search
     API. Returns article metadata: title, url, content and
@@ -223,7 +223,7 @@ def main_agent(agent, query):
     2. Call the article_summarizer tool separately on EACH collected
        article to get its summary, key points, category and relevance
        score.
-    3. 3. Keep the best EXACTLY 8 curated articles whenever 8 are available.
+    3. 3. Keep the best EXACTLY 5 curated articles whenever 5 are available.
     4. Combine all the remaining curated summaries (title, summary,
        key points, category, url for each) into one collection, then
        call the newsletter_html_generator tool once with that full
