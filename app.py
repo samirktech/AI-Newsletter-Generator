@@ -32,16 +32,8 @@ if not all(all_API):
 elif all(all_API):
     st.success("API KEYS LOADED SUCCESSFULLY")
     # =========== MODEL CREATION ==============
-    gemini_model_name = st.sidebar.selectbox(
-        "Gemini Model",
-        options=["gemini-3.5-flash-lite", "gemini-3.6-flash", "gemini-2.5-flash"],
-        index=0,
-        help="Google periodically retires older models (e.g. gemini-2.0-flash "
-             "was shut down). If you get a 404/model-not-found error, try a "
-             "different option here.",
-    )
     model = ChatGoogleGenerativeAI(
-        model=gemini_model_name,
+        model='gemini-3.5-flash-lite',
         google_api_key=GOOGLE_API_KEY
     )
 else:
