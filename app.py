@@ -39,6 +39,11 @@ elif all(all_API):
 else:
     st.info("PASS ALL API-KEYS")
 
+
+st.sidebar.divider()
+st.sidebar.header("Settings")
+max_results = st.sidebar.slider("Articles to fetch", min_value=4, max_value=15, value=8)
+
 # ==================GET USER INFO=====================
 st.markdown("### NEWSLETTER DETAILS")
 newsletter_title = st.text_input("Newsletter Title", value="Weekly Digest")
