@@ -33,7 +33,7 @@ elif all(all_API):
     st.success("API KEYS LOADED SUCCESSFULLY")
     # =========== MODEL CREATION ==============
     model = ChatGoogleGenerativeAI(
-        model='gemini-3.5-flash-lite',
+        model='gemini-2.0-flash',
         google_api_key=GOOGLE_API_KEY
     )
 else:
@@ -50,15 +50,12 @@ newsletter_title = st.text_input("Newsletter Title", value="Weekly Digest")
 
 # =========== TOOL 1 ======================
 def weekly_article_collector(max_results=8):
-    """This function searches the web for the top articles
-    published in the current week using tavily search api.
-    If a specific topic/niche is given it narrows the search
-    to that topic, otherwise it fetches general top trending
-    news headlines across any topic for the week. Returns
-    article metadata like title, url, content and published date"""
+    """This function searches the web for the top trending news
+    headlines published in the current week using the Tavily search
+    API. Returns article metadata: title, url, content and
+    published date."""
 
     query = "top trending world news headlines this week"
-
     client = TavilyClient(api_key=TAVILY_API_KEY)
     response = client.search(
         query=query,
@@ -208,11 +205,9 @@ def main_agent(agent, query):
 
     prompt = """Your task is to orchestrate the full newsletter workflow
     based on the instructions given below:
-    1. Call the weekly_article_collector tool with max_results as given. Only
-       pass a specific "topic" argument if the instructions below name
-       one explicitly - otherwise call it with no topic (topic=None) so
-       it fetches general top trending news headlines across ANY subject
-       for the week, not a single fixed niche.
+    1. Call the weekly_article_collector tool with max_results as given,
+       to fetch general top trending news headlines across ANY subject
+       for the week.
     2. Call the article_summarizer tool separately on EACH collected
        article to get its summary, key points, category and relevance
        score.
@@ -239,9 +234,9 @@ if st.button("Generate Newsletter"):
     with st.spinner("Agent Running"):
         user_query = (
             f"Create this week's newsletter covering the top trending "
-            f"news stories of the week"
-            + (f" about: {topic}" if topic.strip() else " across any topic/category (do not restrict to a single subject)")
-            + f".\nUse max_results={max_results} when collecting articles."
+            f"news stories of the week across any topic/category "
+            f"(do not restrict to a single subject)."
+            + f"\nUse max_results={max_results} when collecting articles."
             + f"\nNewsletter Title: {newsletter_title}"
         )
 
