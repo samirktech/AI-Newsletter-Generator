@@ -155,7 +155,7 @@ custom_keywords = st.text_input(
 
 # =========== ADVANCED SEARCH SETTINGS ==============
 with st.sidebar.expander("🔍 Search Settings", expanded=False):
-    time_range = st.selectbox("Time range", ["week", "month", "year"], index=1)
+    time_range = st.selectbox("Time range", ["week", "month", "year"], index=0)
     search_depth = st.selectbox("Search depth", ["basic", "advanced"], index=0)
 
 # =========== STYLE / TONE SETTINGS ==============
@@ -476,15 +476,20 @@ def main_agent(agent, query):
        economy, agreements or disputes between them) - any sector is
        fine.
     2. The final newsletter MUST contain EXACTLY 5 curated articles,
-       never more and never fewer. If the pool returned fewer than 5
-       articles, call weekly_article_collector again with a
-       broader/looser version of the country or category constraint
-       until at least 5 usable articles are available.
+       never more and never fewer, and every one must cover a DIFFERENT
+       story. If the pool returned fewer than 5 articles, call
+       weekly_article_collector again with a broader/looser version of
+       the country or category constraint until at least 5 usable,
+       distinct articles are available.
     3. Call the article_summarizer tool separately on EACH candidate
        article to get its summary, key points, category and relevance
        score (the writing tone is applied automatically).
     4. From the summarized candidates, keep EXACTLY the best 5
-       curated articles by relevance score.
+       curated articles by relevance score. NEVER keep two articles
+       that report the same event or story, even if they come from
+       different websites or are worded differently - if two summaries
+       describe the same event, keep only the higher-scoring one and
+       replace the other with the next best article on a different story.
     5. Combine those EXACTLY 5 curated summaries (title, summary,
        key points, category, url for each) into one collection, then
        call the newsletter_html_generator tool once with that full
