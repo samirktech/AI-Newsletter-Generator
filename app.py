@@ -136,10 +136,15 @@ category_options = [
     "Business",
     "Science",
     "World",
+    "Custom",
 ]
 with col_category:
     selected_category = st.selectbox("Category", category_options, index=0)
-    category_choice = selected_category
+
+    if selected_category == "Custom":
+        category_choice = st.text_input("Enter Category", value="").strip() or "General"
+    else:
+        category_choice = selected_category
 
 # =========== KEYWORD / TOPIC FOCUS ==============
 custom_keywords = st.text_input(
