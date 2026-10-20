@@ -100,7 +100,7 @@ def get_model(api_key, temperature):
 st.markdown("### NEWSLETTER DETAILS")
 col_title, col_lang = st.columns([2, 1])
 with col_title:
-    newsletter_title = st.text_input("Newsletter Title", value="todaysStories")
+    newsletter_title = st.text_input("Newsletter Title", value="TodaysStories")
 with col_lang:
     output_language = st.selectbox(
         "Output Language",
