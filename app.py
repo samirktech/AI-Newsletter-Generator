@@ -155,7 +155,7 @@ custom_keywords = st.text_input(
 
 # =========== ADVANCED SEARCH SETTINGS ==============
 with st.sidebar.expander("🔍 Search Settings", expanded=False):
-    time_range = st.selectbox("Time range", ["day", "week", "month", "year"], index=1)
+    time_range = st.selectbox("Time range", ["week", "month", "year"], index=1)
     search_depth = st.selectbox("Search depth", ["basic", "advanced"], index=0)
 
 # =========== STYLE / TONE SETTINGS ==============
