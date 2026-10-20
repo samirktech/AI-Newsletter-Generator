@@ -155,7 +155,7 @@ custom_keywords = st.text_input(
 
 # =========== ADVANCED SEARCH SETTINGS ==============
 with st.sidebar.expander("🔍 Search Settings", expanded=False):
-    time_range = st.selectbox("Time range", ["week", "month", "year"], index=1)
+    time_range = st.selectbox("Time range", ["week", "month", "year"], index=0)
     search_depth = st.selectbox("Search depth", ["basic", "advanced"], index=0)
 
 # =========== STYLE / TONE SETTINGS ==============
@@ -325,8 +325,8 @@ def newsletter_html_generator(
     LANGUAGE - the selected output language is {output_lang}:
     - EVERY visible word in the newsletter MUST be written in
       {output_lang}: article headings, summaries, key points, the
-      tagline, the "Read More" button text, the date, and the footer
-      text. Translate article titles/headings into {output_lang} too.
+      tagline, the "Read More" button text, and the date.
+      Translate article titles/headings into {output_lang} too.
       Do not leave any English text anywhere (except as noted below).
     - ONLY EXCEPTION: the newsletter title "{newsletter_title}" must be
       shown exactly as given - do NOT translate, transliterate or alter it.
@@ -381,15 +381,9 @@ def newsletter_html_generator(
       never as an empty filler box.
       Use the real curated article titles, summaries and
       urls throughout - never placeholder/lorem ipsum text.
-    - Footer: a full-width colored strip at the very bottom with small
-      bold centered white text meaning exactly "Generated on
-      {current_date}" translated into {output_lang} (date written in
-      {output_lang}) and nothing else (no other words, no pipeline or
-      AI mentions).
     Give final response strictly in HTML only, no markdown, no code fences.
 
     Newsletter Title: {newsletter_title}
-    Generated On: {current_date}
     Curated Summaries (multiple topics/categories): {curated_summaries}
     """
 
