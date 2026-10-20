@@ -16,26 +16,20 @@ from tavily import TavilyClient
 # To show web-app: complete page layout
 st.set_page_config(page_title="AI Newsletter Generator", page_icon="📰", layout="wide")
 
-# Domains must look like real domains (something.tld) for the Tavily API to
-# accept them - things like "Government" or "News" are categories, not
-# domains, and get silently dropped rather than crashing the whole run.
-_DOMAIN_RE = re.compile(
-    r"^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$"
-)
+# Fixed model temperature (previously controlled by the creativity slider)
+MODEL_TEMPERATURE = 0.4
 
+relevance_focus = "top trending news"
 
-def _clean_domains(raw_list):
-    """Filter a list of user/agent-supplied strings down to ones that look
-    like valid domains. Returns (valid, dropped)."""
-    valid, dropped = [], []
-    for item in raw_list or []:
-        item = str(item).strip().lower()
-        item = re.sub(r"^https?://", "", item).split("/")[0]  # strip scheme/path if present
-        if item and _DOMAIN_RE.match(item):
-            valid.append(item)
-        elif item:
-            dropped.append(item)
-    return valid, dropped
+writing_tone = "Professional"
+current_style_notes = ""
+output_lang = "English"
+
+# Search settings. Updated on every generation and read directly by the
+# search tool, so they always apply (the agent cannot forget or change them).
+current_pool_size = 10  # fixed pool of 10 candidate articles
+current_time_range = "week"
+current_search_depth = "basic"
 
 # ============ SESSION STATE INIT ===================
 if "history" not in st.session_state:
@@ -44,8 +38,6 @@ if "last_html" not in st.session_state:
     st.session_state.last_html = None
 if "last_meta" not in st.session_state:
     st.session_state.last_meta = None
-if "feedback" not in st.session_state:
-    st.session_state.feedback = {}  # newsletter_id -> "up"/"down"
 
 # To give title
 st.title("AI NEWSLETTER GENERATOR")
@@ -53,7 +45,7 @@ st.title("AI NEWSLETTER GENERATOR")
 st.write("""This app helps you build a curated, styled HTML newsletter
 from this week's top trending news using a LangChain agent.""")
 
-st.sidebar.title("Fill Important Details")
+st.sidebar.title("Settings")
 
 # ============ API KEYS ===================
 with st.sidebar.expander("🔑 API Keys", expanded=True):
@@ -67,29 +59,25 @@ with st.sidebar.expander("🔑 API Keys", expanded=True):
         type="password",
         value=st.secrets.get("GOOGLE_API_KEY", "") if hasattr(st, "secrets") else "",
     )
-    remember_keys = st.checkbox(
-        "Remember keys for this session", value=True,
-        help="Keeps keys in session state so you don't have to re-enter them while you tweak settings.",
-    )
 
 all_API = [TAVILY_API_KEY, GOOGLE_API_KEY]
 
 if not all(all_API):
     st.error("Must give API keys")
     st.stop()
-elif all(all_API):
-    st.sidebar.success("API KEYS LOADED SUCCESSFULLY")
 
-    # =========== MODEL CREATION ==============
-    @st.cache_resource(show_spinner=False)
-    def get_model(api_key, temperature):
-        return ChatGoogleGenerativeAI(
-            model='gemini-3.5-flash-lite',
-            google_api_key=api_key,
-            temperature=temperature,
-        )
-else:
-    st.info("PASS ALL API-KEYS")
+st.sidebar.success("API KEYS LOADED SUCCESSFULLY")
+
+
+# =========== MODEL CREATION ==============
+@st.cache_resource(show_spinner=False)
+def get_model(api_key, temperature):
+    return ChatGoogleGenerativeAI(
+        model='gemini-3.5-flash-lite',
+        google_api_key=api_key,
+        temperature=temperature,
+    )
+
 
 # ==================GET USER INFO=====================
 st.markdown("### NEWSLETTER DETAILS")
@@ -122,8 +110,6 @@ with col_country:
 
     if selected_country == "Custom":
         country_choice = st.text_input("Enter Country", value="")
-    elif selected_country == "Any":
-        country_choice = None
     else:
         country_choice = selected_country
 
@@ -136,7 +122,7 @@ category_options = [
 ]
 with col_category:
     selected_category = st.selectbox("Category", category_options, index=0)
-    category_choice = None if selected_category == "Any" else selected_category
+    category_choice = selected_category
 
 # =========== KEYWORD / TOPIC FOCUS ==============
 custom_keywords = st.text_input(
@@ -147,28 +133,8 @@ custom_keywords = st.text_input(
 
 # =========== ADVANCED SEARCH SETTINGS ==============
 with st.sidebar.expander("🔍 Search Settings", expanded=False):
-    collector_pool_size = st.slider(
-        "Candidate pool size", min_value=5, max_value=30, value=10,
-        help="How many candidate articles to fetch before narrowing down to the final 5.",
-    )
     time_range = st.selectbox("Time range", ["day", "week", "month", "year"], index=1)
     search_depth = st.selectbox("Search depth", ["basic", "advanced"], index=0)
-    include_domains_raw = st.text_input("Only include domains (comma separated)", value="")
-    exclude_domains_raw = st.text_input("Exclude domains (comma separated)", value="")
-
-include_domains, _dropped_include = _clean_domains(include_domains_raw.split(","))
-exclude_domains, _dropped_exclude = _clean_domains(exclude_domains_raw.split(","))
-
-if _dropped_include:
-    st.sidebar.warning(
-        f"Ignored invalid include domain(s): {', '.join(_dropped_include)}. "
-        "Use a real domain like 'bbc.com', not a category name."
-    )
-if _dropped_exclude:
-    st.sidebar.warning(
-        f"Ignored invalid exclude domain(s): {', '.join(_dropped_exclude)}. "
-        "Use a real domain like 'bbc.com', not a category name."
-    )
 
 # =========== STYLE / TONE SETTINGS ==============
 with st.sidebar.expander("🎨 Style Settings", expanded=False):
@@ -176,10 +142,6 @@ with st.sidebar.expander("🎨 Style Settings", expanded=False):
         "Writing tone", ["Professional", "Casual", "Playful", "Formal", "Enthusiastic"], index=0
     )
     accent_color = st.color_picker("Accent / highlight color", value="#1a73e8")
-    creativity = st.slider(
-        "Model creativity (temperature)", min_value=0.0, max_value=1.0, value=0.4, step=0.1
-    )
-    preview_dark_mode = st.checkbox("Preview panel dark background", value=False)
 
 # =========== ARCHIVE / HISTORY ==============
 with st.sidebar.expander(f"🗂️ Archive ({len(st.session_state.history)})", expanded=False):
@@ -204,39 +166,45 @@ with st.sidebar.expander(f"🗂️ Archive ({len(st.session_state.history)})", e
 
 # =========== TOOL 1 ======================
 def weekly_article_collector(
-    max_results: int = 5,
     country: Optional[str] = None,
     category: Optional[str] = None,
     keywords: Optional[str] = None,
-    time_range: str = "week",
-    search_depth: str = "basic",
-    include_domains: Optional[list] = None,
-    exclude_domains: Optional[list] = None,
 ):
     """This function searches the web for the top trending news
     headlines published recently using the Tavily search API.
     Optionally restricts results to a specific country and/or
-    category, nudges the query toward extra keywords/topics, and
-    supports a configurable time_range (day/week/month/year),
-    search_depth (basic/advanced), and include/exclude domain lists.
+    category (when category is "World" and a country is given, it
+    searches for news between that country and other countries in any
+    sector) and nudges the query toward extra keywords/topics.
+    The pool size, time range and search depth are applied automatically.
     Returns article metadata: title, url, content and published date."""
 
-    query_parts = ["top trending"]
-    if category:
-        query_parts.append(f"{category}")
-    query_parts.append("news headlines")
-    if keywords:
-        query_parts.append(f"about {keywords}")
-    if country:
-        query_parts.append(f"in {country}")
-    query_parts.append(f"this {time_range}")
-    query = " ".join(query_parts)
+    max_results = current_pool_size
+    time_range = current_time_range
+    search_depth = current_search_depth
 
-    # Defensive cleanup: the agent sometimes passes category/keyword-like
-    # strings (e.g. "Government") instead of real domains. Silently drop
-    # anything that isn't a valid domain rather than letting the API call fail.
-    include_domains, _ = _clean_domains(include_domains)
-    exclude_domains, _ = _clean_domains(exclude_domains)
+    if category and category.strip().lower() == "world" and country:
+        # World + country: news between the selected country and other
+        # countries, across any sector.
+        query_parts = [
+            f"{country} relations with other countries news",
+            "(diplomacy, trade, economy, defense, technology, agreements, disputes)",
+        ]
+        if keywords:
+            query_parts.append(f"about {keywords}")
+        query_parts.append(f"this {time_range}")
+        query = " ".join(query_parts)
+    else:
+        query_parts = ["top trending"]
+        if category:
+            query_parts.append(f"{category}")
+        query_parts.append("news headlines")
+        if keywords:
+            query_parts.append(f"about {keywords}")
+        if country:
+            query_parts.append(f"in {country}")
+        query_parts.append(f"this {time_range}")
+        query = " ".join(query_parts)
 
     client = TavilyClient(api_key=TAVILY_API_KEY)
     search_kwargs = dict(
@@ -247,10 +215,6 @@ def weekly_article_collector(
         include_answer=False,
         search_depth=search_depth,
     )
-    if include_domains:
-        search_kwargs["include_domains"] = include_domains
-    if exclude_domains:
-        search_kwargs["exclude_domains"] = exclude_domains
 
     response = client.search(**search_kwargs)
 
@@ -266,17 +230,20 @@ def weekly_article_collector(
 
 
 # =========== TOOL 2 ======================
-def article_summarizer(article_text, article_title="Untitled", tone="Professional"):
+def article_summarizer(article_text, article_title="Untitled"):
     """This function takes article text or url content and
     produces a concise summary, key points, category
-    and relevance score (out of 10) using LLM,
-    given article title, content, and a desired writing tone."""
+    and relevance score (out of 10) using LLM, given article title
+    and content. The writing tone and the relevance focus (selected
+    country/category) are applied automatically."""
 
-    prompt = f"""You are a professional newsletter editor writing in a {tone.lower()} tone.
+    prompt = f"""You are a professional newsletter editor writing in a {writing_tone.lower()} tone.
     Summarize the article below in 3-4 concise lines,
     then list 2-3 key points as bullets, assign a single
     category (Tech/Business/Science/World/Other) and give
-    a relevance score out of 10 for a general tech audience.
+    a relevance score out of 10 for how well the article matches
+    this focus: {relevance_focus}. Score ONLY on how well it matches
+    that focus, not on how interesting it is for any particular industry.
 
     Article Title: {article_title}
     Article Content: {article_text}
@@ -296,14 +263,15 @@ def article_summarizer(article_text, article_title="Untitled", tone="Professiona
 def newsletter_html_generator(
     curated_summaries,
     newsletter_title="Weekly Newsletter",
-    style_notes: str = "",
 ):
     """This function converts curated article summaries
     into a styled html newsletter template suitable
     for email or web publishing, given curated summaries
-    text, newsletter title, and optional style_notes (language,
-    tone, accent color) that only affect visual/language flavor,
-    never the required structure."""
+    text and newsletter title. Style preferences (language,
+    tone, accent color) are applied automatically."""
+
+    style_notes = current_style_notes
+    text_dir = "rtl" if output_lang == "Arabic" else "ltr"
 
     current_date = datetime.datetime.now().strftime("%d %B %Y")
 
@@ -332,9 +300,29 @@ def newsletter_html_generator(
     Do NOT include any <img> tags, background-image styles, or image
     urls anywhere in the output - text and colored boxes only, no photos.
 
+    LANGUAGE - the selected output language is {output_lang}:
+    - EVERY visible word in the newsletter MUST be written in
+      {output_lang}: article headings, summaries, key points, the
+      tagline, the "Read More" button text, the date, and the footer
+      text. Translate article titles/headings into {output_lang} too.
+      Do not leave any English text anywhere (except as noted below).
+    - ONLY EXCEPTION: the newsletter title "{newsletter_title}" must be
+      shown exactly as given - do NOT translate, transliterate or alter it.
+    - Write the date in {output_lang} as well (translate the month name
+      and use the natural date order for that language).
+    - Set <html lang> for {output_lang} and set dir="{text_dir}" on the
+      <html> tag.
+
+    Do NOT display any article category label or category name anywhere
+    in the newsletter (not in headings, accent lines, info boxes, or
+    elsewhere). Likewise, do NOT display any relevance score or rating
+    (e.g. "8/10") anywhere in the newsletter - it is for internal
+    ranking only.
+
     Follow this exact structure and style:
-    - Top-left corner: a small bordered box showing the exact text
-      "{current_date}" as the generation/publish date.
+    - Top-left corner: a small bordered box showing the date
+      "{current_date}" (written in {output_lang}) as the
+      generation/publish date.
     - Masthead: one huge bold centered title showing
       "{newsletter_title}" (60-90px, wide letter-spacing, like a
       newspaper nameplate).
@@ -349,9 +337,9 @@ def newsletter_html_generator(
       row-gap around 24px) to lay out one section per curated article.
       Do NOT create a single "top story" block - turn every curated
       article into its own section: a bold uppercase heading (short,
-      based on the article's own title/category) followed by a
+      based on the article's own title) followed by a
       paragraph using that article's summary and key points as body
-      text, spanning whatever categories the curated summaries
+      text, spanning whatever topics the curated summaries
       actually cover (world news, tech, business, science, etc).
     - CRITICAL - there will always be EXACTLY 5 curated articles below.
       Render EXACTLY 5 sections in the grid, one per article - never
@@ -361,20 +349,18 @@ def newsletter_html_generator(
       <div>, or a solid-colored block with no text in it anywhere on
       the page - every colored box must contain real content from the
       curated summaries.
-    - For 2-3 of the sections, add a short colored accent line
-      (in a highlight color) above the paragraph showing that article's
-      own category or relevance score.
     - At the bottom of each column, add one pale colored info box
-      (light blue/light pink) containing that source article's category
-      and a bold "Read More" link pointing to the real article url -
-      only add this info box if there is a real article category and
-      url to put inside it, never as an empty filler box.
-      Use the real curated article titles, summaries, categories and
+      (light blue/light pink) containing a bold "Read More" link
+      pointing to the real article url -
+      only add this info box if there is a real url to put inside it,
+      never as an empty filler box.
+      Use the real curated article titles, summaries and
       urls throughout - never placeholder/lorem ipsum text.
     - Footer: a full-width colored strip at the very bottom with small
-      bold centered white text reading something like "Compiled
-      automatically by a multi-agent AI pipeline | Generated on
-      {current_date}".
+      bold centered white text meaning exactly "Generated on
+      {current_date}" translated into {output_lang} (date written in
+      {output_lang}) and nothing else (no other words, no pipeline or
+      AI mentions).
     Give final response strictly in HTML only, no markdown, no code fences.
 
     Newsletter Title: {newsletter_title}
@@ -417,9 +403,22 @@ def _strip_html_to_text(html):
     return text.strip()
 
 
-def _extract_links(html):
-    """Pull out (text, href) pairs for a quick source list under the preview."""
-    return re.findall(r'<a[^>]+href="([^"]+)"[^>]*>(.*?)</a>', html, flags=re.IGNORECASE | re.DOTALL)
+def _open_links_in_new_tab(html):
+    """Make every link open in a new browser tab. Inside the Streamlit preview
+    iframe, a normal link loads inside the iframe, and many sites (e.g.
+    reuters.com) refuse to be framed, which shows 'refused to connect'."""
+    def _fix(match):
+        attrs = match.group(1)
+        attrs = re.sub(r'\s+target\s*=\s*("[^"]*"|\'[^\']*\'|\S+)', "", attrs, flags=re.IGNORECASE)
+        attrs = re.sub(r'\s+rel\s*=\s*("[^"]*"|\'[^\']*\'|\S+)', "", attrs, flags=re.IGNORECASE)
+        return f'<a{attrs} target="_blank" rel="noopener noreferrer">'
+
+    html = re.sub(r"<a\b([^>]*)>", _fix, html, flags=re.IGNORECASE)
+    if re.search(r"<head[^>]*>", html, flags=re.IGNORECASE):
+        html = re.sub(
+            r"(<head[^>]*>)", r'\1<base target="_blank">', html, count=1, flags=re.IGNORECASE
+        )
+    return html
 
 
 def _reading_time_minutes(word_count, wpm=200):
@@ -428,14 +427,13 @@ def _reading_time_minutes(word_count, wpm=200):
 
 max_results = 5  # newsletter template always renders exactly 5 curated sections
 
-if all(all_API):
-    model = get_model(GOOGLE_API_KEY, creativity)
+model = get_model(GOOGLE_API_KEY, MODEL_TEMPERATURE)
 
-    # ========== Agent Creation ================
-    agent = create_agent(
-        model=model,
-        tools=[weekly_article_collector, article_summarizer, newsletter_html_generator]
-    )
+# ========== Agent Creation ================
+agent = create_agent(
+    model=model,
+    tools=[weekly_article_collector, article_summarizer, newsletter_html_generator]
+)
 
 
 # ============== MAIN AGENT ===============
@@ -445,34 +443,33 @@ def main_agent(agent, query):
 
     prompt = """Your task is to orchestrate the full newsletter workflow
     based on the instructions given below:
-    1. Call the weekly_article_collector tool with the pool_max_results
-       given, and with the country, category, keywords, time_range,
-       search_depth, include_domains and exclude_domains as given (if
-       any), to fetch a pool of candidate top trending news headlines.
+    1. Call the weekly_article_collector tool with the country,
+       category and keywords as given (if any) - the pool size, time
+       range and search depth are applied automatically - to fetch a
+       pool of candidate top trending news headlines.
        If a country is given, ONLY include news from that country. If a
        category is given, ONLY include news from that category.
-       IMPORTANT: include_domains and exclude_domains must ONLY ever
-       contain real website domains (e.g. "bbc.com", "reuters.com").
-       NEVER put a category name, keyword, or topic (e.g. "Government",
-       "Tech") into include_domains or exclude_domains - if no real
-       domains were given, leave those lists empty.
+       EXCEPTION: if the category is World and a country is given,
+       ONLY include news that involves BOTH that country and at least
+       one other country (e.g. diplomacy, trade, defense, technology,
+       economy, agreements or disputes between them) - any sector is
+       fine.
     2. The final newsletter MUST contain EXACTLY 5 curated articles,
        never more and never fewer. If the pool returned fewer than 5
-       articles, call weekly_article_collector again with a larger
-       pool_max_results (and, if needed, a broader/looser version of
-       the country or category constraint) until at least 5 usable
-       articles are available.
+       articles, call weekly_article_collector again with a
+       broader/looser version of the country or category constraint
+       until at least 5 usable articles are available.
     3. Call the article_summarizer tool separately on EACH candidate
        article to get its summary, key points, category and relevance
-       score, using the requested writing tone.
+       score (the writing tone is applied automatically).
     4. From the summarized candidates, keep EXACTLY the best 5
        curated articles by relevance score.
     5. Combine those EXACTLY 5 curated summaries (title, summary,
        key points, category, url for each) into one collection, then
        call the newsletter_html_generator tool once with that full
-       collection, the newsletter title, and any style_notes (language,
-       tone, accent color) so all 5 curated articles appear in the
-       final newsletter.
+       collection and the newsletter title (language, tone and accent
+       color are applied automatically) so all 5 curated articles
+       appear in the final newsletter.
     Give the final response output strictly in HTML, no markdowns,
     no code fences, no explanation text before or after the HTML.
     Instructions given below:
@@ -480,35 +477,43 @@ def main_agent(agent, query):
 
     prompt = prompt + query
 
-    response = agent.invoke({"messages": [{'role': 'user', 'content': prompt}]})
+    response = agent.invoke(
+        {"messages": [{'role': 'user', 'content': prompt}]},
+        config={"recursion_limit": 100},
+    )
     code = _extract_text(response['messages'][-1])
     return code
 
 
 # ========== CALLING MAIN AGENT ===============
-gen_col, regen_col = st.columns([1, 1])
-generate_clicked = gen_col.button("Generate Newsletter", type="primary")
-regenerate_clicked = regen_col.button(
-    "Regenerate with same settings", disabled=st.session_state.last_meta is None
-)
+generate_clicked = st.button("Generate Newsletter", type="primary")
 
-if generate_clicked or regenerate_clicked:
+if generate_clicked:
     if country_choice:
         country_line = f"\nCountry: {country_choice} (ONLY use news from this country)."
     else:
         country_line = "\nCountry: Any (do not restrict to a single country)."
 
-    if category_choice:
-        category_line = f"\nCategory: {category_choice} (ONLY use news from this category)."
+    if category_choice == "World" and country_choice:
+        category_line = (
+            f"\nCategory: World (ONLY use news between {country_choice} and "
+            f"other countries, in any sector such as politics, trade, defense, "
+            f"technology or economy)."
+        )
     else:
-        category_line = "\nCategory: Any (do not restrict to a single category)."
+        category_line = f"\nCategory: {category_choice} (ONLY use news from this category)."
 
     keywords_line = f"\nExtra keywords/topics to favor: {custom_keywords}." if custom_keywords else ""
-    domains_line = ""
-    if include_domains:
-        domains_line += f"\nOnly include these domains: {', '.join(include_domains)}."
-    if exclude_domains:
-        domains_line += f"\nExclude these domains: {', '.join(exclude_domains)}."
+
+    # Relevance is scored against what the user selected (used by article_summarizer)
+    if category_choice == "World" and country_choice:
+        relevance_focus = f"news between {country_choice} and other countries (any sector)"
+    elif category_choice and country_choice:
+        relevance_focus = f"{category_choice} news in {country_choice}"
+    else:
+        relevance_focus = f"{category_choice} news"
+    if custom_keywords:
+        relevance_focus += f", especially about {custom_keywords}"
 
     style_notes = (
         f"Write in {output_language}. Use a {tone_choice.lower()} tone throughout. "
@@ -516,19 +521,21 @@ if generate_clicked or regenerate_clicked:
         f"accent lines and info boxes wherever a color choice is needed."
     )
 
+    writing_tone = tone_choice
+    current_style_notes = style_notes
+    output_lang = output_language
+    current_time_range = time_range
+    current_search_depth = search_depth
+
     user_query = (
         f"Create this week's newsletter covering the top trending "
         f"news stories of the week."
-        + f"\nUse pool_max_results={collector_pool_size} as the starting "
-          f"pool size when collecting candidate articles."
-        + f"\nUse time_range={time_range} and search_depth={search_depth}."
         + "\nThe final newsletter must contain EXACTLY "
           f"{max_results} curated articles - not more, not fewer."
         + f"\nNewsletter Title: {newsletter_title}"
         + country_line
         + category_line
         + keywords_line
-        + domains_line
         + f"\nStyle notes (do not change structure, only flavor): {style_notes}"
     )
 
@@ -539,6 +546,7 @@ if generate_clicked or regenerate_clicked:
         status_box.write("🖋️ Drafting the styled HTML newsletter...")
         raw_code = main_agent(agent, user_query)
         code = raw_code.replace("```html", "").replace("```", "").strip()
+        code = _open_links_in_new_tab(code)
         status_box.update(label="Newsletter generated!", state="complete", expanded=False)
     except Exception as e:
         status_box.update(label="Generation failed", state="error", expanded=True)
@@ -548,17 +556,13 @@ if generate_clicked or regenerate_clicked:
     plain_text = _strip_html_to_text(code)
     word_count = len(plain_text.split())
     reading_time = _reading_time_minutes(word_count)
-    links = _extract_links(code)
 
     entry_id = str(uuid.uuid4())
     meta = {
         "country": country_choice or "Any",
-        "category": category_choice or "Any",
-        "language": output_language,
-        "tone": tone_choice,
+        "category": category_choice,
         "word_count": word_count,
         "reading_time": reading_time,
-        "links": links,
     }
     st.session_state.last_html = code
     st.session_state.last_meta = meta
@@ -603,31 +607,6 @@ if st.session_state.last_html:
         with st.popover("📋 Copy HTML"):
             st.code(code, language="html")
 
-    up_col, down_col, _ = st.columns([1, 1, 6])
-    current_id = st.session_state.history[-1]["id"] if st.session_state.history else None
-    if current_id:
-        if up_col.button("👍", key=f"up_{current_id}"):
-            st.session_state.feedback[current_id] = "up"
-        if down_col.button("👎", key=f"down_{current_id}"):
-            st.session_state.feedback[current_id] = "down"
-        fb = st.session_state.feedback.get(current_id)
-        if fb:
-            st.caption(f"Thanks for the feedback ({'👍' if fb == 'up' else '👎'})!")
-
     st.divider()
     st.subheader("Preview")
-    if preview_dark_mode:
-        st.markdown(
-            '<div style="background:#111;padding:12px;border-radius:8px;">',
-            unsafe_allow_html=True,
-        )
-        st.components.v1.html(code, height=900, scrolling=True)
-        st.markdown("</div>", unsafe_allow_html=True)
-    else:
-        st.components.v1.html(code, height=900, scrolling=True)
-
-    if meta["links"]:
-        with st.expander("🔗 Sources used in this newsletter"):
-            for href, text in meta["links"]:
-                clean_text = re.sub(r"<[^>]+>", "", text).strip() or href
-                st.markdown(f"- [{clean_text}]({href})")
+    st.components.v1.html(code, height=900, scrolling=True)
