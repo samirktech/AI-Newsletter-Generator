@@ -19,7 +19,9 @@ st.set_page_config(page_title="AI Newsletter Generator", page_icon="📰", layou
 # Fixed model temperature (previously controlled by the creativity slider)
 MODEL_TEMPERATURE = 0.4
 
+
 relevance_focus = "top trending news"
+
 
 writing_tone = "Professional"
 current_style_notes = ""
@@ -165,7 +167,7 @@ with st.sidebar.expander(f"🗂️ Archive ({len(st.session_state.history)})", e
     else:
         for item in reversed(st.session_state.history):
             st.markdown(f"**{item['title']}** — {item['timestamp']}")
-            st.caption(f"{item['meta']['country']} · {item['meta']['category']} · {item['meta']['word_count']} words")
+            st.caption(f"{item['meta']['country']} · {item['meta']['category']}")
             _archive_download_button(
                 "Download",
                 data=item["html"],
@@ -436,10 +438,6 @@ def _open_links_in_new_tab(html):
     return html
 
 
-def _reading_time_minutes(word_count, wpm=200):
-    return max(1, round(word_count / wpm))
-
-
 max_results = 5  # newsletter template always renders exactly 5 curated sections
 
 model = get_model(GOOGLE_API_KEY, MODEL_TEMPERATURE)
@@ -568,16 +566,10 @@ if generate_clicked:
         st.error(f"Something went wrong while generating the newsletter: {e}")
         st.stop()
 
-    plain_text = _strip_html_to_text(code)
-    word_count = len(plain_text.split())
-    reading_time = _reading_time_minutes(word_count)
-
     entry_id = str(uuid.uuid4())
     meta = {
         "country": country_choice or "Any",
         "category": category_choice,
-        "word_count": word_count,
-        "reading_time": reading_time,
     }
     st.session_state.last_html = code
     st.session_state.last_meta = meta
@@ -592,16 +584,9 @@ if generate_clicked:
 # ========== RESULTS DISPLAY (persists across reruns via session_state) =====
 if st.session_state.last_html:
     code = st.session_state.last_html
-    meta = st.session_state.last_meta
     plain_text = _strip_html_to_text(code)
 
     st.success("Newsletter generated!")
-
-    m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Word count", meta["word_count"])
-    m2.metric("Est. reading time", f"{meta['reading_time']} min")
-    m3.metric("Country", meta["country"])
-    m4.metric("Category", meta["category"])
 
     dl_col1, dl_col2, dl_col3 = st.columns(3)
     with dl_col1:
