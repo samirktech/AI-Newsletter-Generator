@@ -19,8 +19,13 @@ st.set_page_config(page_title="AI Newsletter Generator", page_icon="📰", layou
 # Fixed model temperature (previously controlled by the creativity slider)
 MODEL_TEMPERATURE = 0.4
 
+# What the summarizer scores relevance against. Updated on every generation
+# from the selected country / category / keywords (see generate block below).
 relevance_focus = "top trending news"
 
+# Writing tone and style notes (language, tone, accent color). Updated on every
+# generation and read directly by the tools, so they never depend on the agent
+# remembering to pass them.
 writing_tone = "Professional"
 current_style_notes = ""
 output_lang = "English"
@@ -39,11 +44,26 @@ if "last_html" not in st.session_state:
 if "last_meta" not in st.session_state:
     st.session_state.last_meta = None
 
+
+def _archive_download_button(label, **kwargs):
+    """Download button that does not re-run the script on click (Streamlit
+    1.43+), so downloading from the archive does not interrupt a newsletter
+    that is still being generated. On older versions it falls back to the
+    normal download button."""
+    try:
+        version = tuple(int(x) for x in st.__version__.split(".")[:2])
+    except ValueError:
+        version = (0, 0)
+    if version >= (1, 43):
+        return st.download_button(label, on_click="ignore", **kwargs)
+    return st.download_button(label, **kwargs)
+
+
 # To give title
 st.title("AI NEWSLETTER GENERATOR")
 
 st.write("""This app helps you build a curated, styled HTML newsletter
-from top trending news using a LangChain agent.""")
+from this week's top trending news using a LangChain agent.""")
 
 st.sidebar.title("Settings")
 
@@ -151,7 +171,7 @@ with st.sidebar.expander(f"🗂️ Archive ({len(st.session_state.history)})", e
         for item in reversed(st.session_state.history):
             st.markdown(f"**{item['title']}** — {item['timestamp']}")
             st.caption(f"{item['meta']['country']} · {item['meta']['category']} · {item['meta']['word_count']} words")
-            st.download_button(
+            _archive_download_button(
                 "Download",
                 data=item["html"],
                 file_name=f"{item['title'].replace(' ', '_')}_{item['id'][:6]}.html",
