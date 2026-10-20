@@ -155,7 +155,7 @@ custom_keywords = st.text_input(
 
 # =========== ADVANCED SEARCH SETTINGS ==============
 with st.sidebar.expander("🔍 Search Settings", expanded=False):
-    time_range = st.selectbox("Time range", ["week", "month", "year"], index=0)
+    time_range = st.selectbox("Time range", ["week", "month", "year"], index=1)
     search_depth = st.selectbox("Search depth", ["basic", "advanced"], index=0)
 
 # =========== STYLE / TONE SETTINGS ==============
@@ -245,7 +245,7 @@ def weekly_article_collector(
         articles.append({
             "title": result.get("title"),
             "url": result.get("url"),
-            "content": result.get("content"),
+            "content": (result.get("content") or "")[:800],
             "published_date": result.get("published_date", "N/A"),
         })
     return articles
@@ -483,7 +483,9 @@ def main_agent(agent, query):
        distinct articles are available.
     3. Call the article_summarizer tool separately on EACH candidate
        article to get its summary, key points, category and relevance
-       score (the writing tone is applied automatically).
+       score (the writing tone is applied automatically). Make ALL of
+       these article_summarizer calls together in a SINGLE step (in
+       parallel), not one after another, to save time.
     4. From the summarized candidates, keep EXACTLY the best 5
        curated articles by relevance score. NEVER keep two articles
        that report the same event or story, even if they come from
