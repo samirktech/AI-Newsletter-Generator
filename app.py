@@ -58,7 +58,7 @@ def _archive_download_button(label, **kwargs):
 st.title("AI NEWSLETTER GENERATOR")
 
 st.write("""This app helps you build a curated, styled HTML newsletter
-from this week's top trending news using a LangChain agent.""")
+from top trending news using a LangChain agent.""")
 
 st.sidebar.title("Settings")
 
