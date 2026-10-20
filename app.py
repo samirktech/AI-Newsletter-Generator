@@ -100,7 +100,7 @@ def get_model(api_key, temperature):
 st.markdown("### NEWSLETTER DETAILS")
 col_title, col_lang = st.columns([2, 1])
 with col_title:
-    newsletter_title = st.text_input("Newsletter Title", value="Weekly Digest")
+    newsletter_title = st.text_input("Newsletter Title", value="todaysStories")
 with col_lang:
     output_language = st.selectbox(
         "Output Language",
@@ -350,10 +350,13 @@ def newsletter_html_generator(
       newspaper nameplate).
     - Sub-banner: a full-width colored horizontal band directly below
       the masthead with small bold centered uppercase tagline text
-      summarizing that this covers this week's top stories across
+      summarizing that this covers the top stories across
       any topic/category (do not hardcode a single subject like "AI"
       in the tagline - infer a short general tagline from the actual
       mix of categories present in the curated summaries below).
+      The tagline must be time-neutral: do NOT mention "week", "day",
+      "month", "year", "today", "this week" or any other time period,
+      so the same tagline works for any selected time range.
     - Below the banner, use a CSS grid with exactly 2 columns
       (display: grid; grid-template-columns: 1fr 1fr; column-gap and
       row-gap around 24px) to lay out one section per curated article.
@@ -387,7 +390,7 @@ def newsletter_html_generator(
 
     Newsletter Title: {newsletter_title}
     Generated On: {current_date}
-    Curated Summaries (multiple topics/categories from this week): {curated_summaries}
+    Curated Summaries (multiple topics/categories): {curated_summaries}
     """
 
     if style_notes:
